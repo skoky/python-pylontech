@@ -1,9 +1,11 @@
+import socket
+import sys
 from typing import Dict
 import logging
-import serial
 import construct
 
 logger = logging.getLogger(__name__)
+
 
 class HexToByte(construct.Adapter):
     def _decode(self, obj, context, path) -> bytes:
@@ -25,22 +27,25 @@ class DivideBy100(construct.Adapter):
     def _decode(self, obj, context, path) -> float:
         return obj / 100
 
+
 class DivideBy10(construct.Adapter):
     def _decode(self, obj, context, path) -> float:
         return obj / 10
+
 
 class ToVolt(construct.Adapter):
     def _decode(self, obj, context, path) -> float:
         return obj / 1000
 
+
 class ToAmp(construct.Adapter):
     def _decode(self, obj, context, path) -> float:
         return obj / 10
 
+
 class ToCelsius(construct.Adapter):
     def _decode(self, obj, context, path) -> float:
         return (obj - 2731) / 10.0  # in Kelvin*10
-
 
 
 class Pylontech:
@@ -80,8 +85,8 @@ class Pylontech:
             "ShouldCharge"
             / construct.Computed(
                 lambda this: this.ChargeImmediately2
-                | this.ChargeImmediately1
-                | this.FullChargeRequest
+                             | this.ChargeImmediately1
+                             | this.FullChargeRequest
             ),
             "_padding" / construct.BitsInteger(3),
         ),
@@ -99,7 +104,8 @@ class Pylontech:
             "CellVoltages" / construct.Array(construct.this.NumberOfCells, ToVolt(construct.Int16sb)),
             "NumberOfTemperatures" / construct.Int8ub,
             "AverageBMSTemperature" / ToCelsius(construct.Int16sb),
-            "GroupedCellsTemperatures" / construct.Array(construct.this.NumberOfTemperatures - 1, ToCelsius(construct.Int16sb)),
+            "GroupedCellsTemperatures" / construct.Array(construct.this.NumberOfTemperatures - 1,
+                                                         ToCelsius(construct.Int16sb)),
             "Current" / ToAmp(construct.Int16sb),
             "Voltage" / ToVolt(construct.Int16ub),
             "Power" / construct.Computed(construct.this.Current * construct.this.Voltage),
@@ -108,13 +114,16 @@ class Pylontech:
             "_TotalCapacity1" / DivideBy1000(construct.Int16ub),
             "CycleNumber" / construct.Int16ub,
             "_OptionalFields" / construct.If(construct.this._UserDefinedItems > 2,
-                                           construct.Struct("RemainingCapacity2" / DivideBy1000(construct.Int24ub),
-                                                            "TotalCapacity2" / DivideBy1000(construct.Int24ub))),
-            "RemainingCapacity" / construct.Computed(lambda this: this._OptionalFields.RemainingCapacity2 if this._UserDefinedItems > 2 else this._RemainingCapacity1),
-            "TotalCapacity" / construct.Computed(lambda this: this._OptionalFields.TotalCapacity2 if this._UserDefinedItems > 2 else this._TotalCapacity1),
+                                             construct.Struct("RemainingCapacity2" / DivideBy1000(construct.Int24ub),
+                                                              "TotalCapacity2" / DivideBy1000(construct.Int24ub))),
+            "RemainingCapacity" / construct.Computed(lambda
+                                                         this: this._OptionalFields.RemainingCapacity2 if this._UserDefinedItems > 2 else this._RemainingCapacity1),
+            "TotalCapacity" / construct.Computed(lambda
+                                                     this: this._OptionalFields.TotalCapacity2 if this._UserDefinedItems > 2 else this._TotalCapacity1),
         )),
         "TotalPower" / construct.Computed(lambda this: sum([x.Power for x in this.Module])),
-        "StateOfCharge" / construct.Computed(lambda this: sum([x.RemainingCapacity for x in this.Module]) / sum([x.TotalCapacity for x in this.Module])),
+        "StateOfCharge" / construct.Computed(
+            lambda this: sum([x.RemainingCapacity for x in this.Module]) / sum([x.TotalCapacity for x in this.Module])),
 
     )
     get_values_single_fmt = construct.Struct(
@@ -123,7 +132,8 @@ class Pylontech:
         "CellVoltages" / construct.Array(construct.this.NumberOfCells, ToVolt(construct.Int16sb)),
         "NumberOfTemperatures" / construct.Int8ub,
         "AverageBMSTemperature" / ToCelsius(construct.Int16sb),
-        "GroupedCellsTemperatures" / construct.Array(construct.this.NumberOfTemperatures - 1, ToCelsius(construct.Int16sb)),
+        "GroupedCellsTemperatures" / construct.Array(construct.this.NumberOfTemperatures - 1,
+                                                     ToCelsius(construct.Int16sb)),
         "Current" / ToAmp(construct.Int16sb),
         "Voltage" / ToVolt(construct.Int16ub),
         "Power" / construct.Computed(construct.this.Current * construct.this.Voltage),
@@ -132,17 +142,20 @@ class Pylontech:
         "_TotalCapacity1" / DivideBy1000(construct.Int16ub),
         "CycleNumber" / construct.Int16ub,
         "_OptionalFields" / construct.If(construct.this._UserDefinedItems > 2,
-                                       construct.Struct("RemainingCapacity2" / DivideBy1000(construct.Int24ub),
-                                                        "TotalCapacity2" / DivideBy1000(construct.Int24ub))),
-        "RemainingCapacity" / construct.Computed(lambda this: this._OptionalFields.RemainingCapacity2 if this._UserDefinedItems > 2 else this._RemainingCapacity1),
-        "TotalCapacity" / construct.Computed(lambda this: this._OptionalFields.TotalCapacity2 if this._UserDefinedItems > 2 else this._TotalCapacity1),
+                                         construct.Struct("RemainingCapacity2" / DivideBy1000(construct.Int24ub),
+                                                          "TotalCapacity2" / DivideBy1000(construct.Int24ub))),
+        "RemainingCapacity" / construct.Computed(lambda
+                                                     this: this._OptionalFields.RemainingCapacity2 if this._UserDefinedItems > 2 else this._RemainingCapacity1),
+        "TotalCapacity" / construct.Computed(
+            lambda this: this._OptionalFields.TotalCapacity2 if this._UserDefinedItems > 2 else this._TotalCapacity1),
         "TotalPower" / construct.Computed(construct.this.Power),
         "StateOfCharge" / construct.Computed(construct.this.RemainingCapacity / construct.this.TotalCapacity),
     )
 
-    def __init__(self, serial_port='/dev/ttyUSB0', baudrate=115200):
-        self.s = serial.Serial(serial_port, baudrate, bytesize=8, parity=serial.PARITY_NONE, stopbits=1, timeout=2, exclusive=True)
-
+    def __init__(self, ip: str, port: int):
+        self.rs_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.rs_socket.connect((ip, port))
+        print(f"Socket open {self.rs_socket}")
 
     @staticmethod
     def get_frame_checksum(frame: bytes):
@@ -168,13 +181,12 @@ class Pylontech:
 
         return (lenid_invert_plus_one << 12) + lenid
 
-
     def send_cmd(self, address: int, cmd, info: bytes = b''):
         raw_frame = self._encode_cmd(address, cmd, info)
-        self.s.write(raw_frame)
+        self.rs_socket.send(raw_frame)
 
-
-    def _encode_cmd(self, address: int, cid2: int, info: bytes = b''):
+    @staticmethod
+    def _encode_cmd(address: int, cid2: int, info: bytes = b''):
         cid1 = 0x46
 
         info_length = Pylontech.get_info_length(info)
@@ -185,7 +197,6 @@ class Pylontech:
         frame_chksum = Pylontech.get_frame_checksum(frame)
         whole_frame = (b"~" + frame + "{:04X}".format(frame_chksum).encode() + b"\r")
         return whole_frame
-
 
     def _decode_hw_frame(self, raw_frame: bytes) -> bytes:
         # XXX construct
@@ -209,21 +220,19 @@ class Pylontech:
 
         return format.parse(frame)
 
-
     def read_frame(self):
-        raw_frame = self.s.readline()
+        raw_frame = self.rs_socket.recv(128)
         f = self._decode_hw_frame(raw_frame=raw_frame)
         parsed = self._decode_frame(f)
         return parsed
-
 
     def scan_for_batteries(self, start=0, end=255) -> Dict[int, str]:
         """ Returns a map of the batteries id to their serial number """
         batteries = {}
         for adr in range(start, end, 1):
             bdevid = "{:02X}".format(adr).encode()
-            self.send_cmd(adr, 0x93, bdevid) # Probe for serial number
-            raw_frame = self.s.readline()
+            self.send_cmd(adr, 0x93, bdevid)  # Probe for serial number
+            raw_frame = self.rs_socket.recv(128)
 
             if raw_frame:
                 sn = self.get_module_serial_number(adr)
@@ -236,17 +245,14 @@ class Pylontech:
 
         return batteries
 
-
     def get_protocol_version(self):
         self.send_cmd(0, 0x4f)
         return self.read_frame()
-
 
     def get_manufacturer_info(self):
         self.send_cmd(0, 0x51)
         f = self.read_frame()
         return self.manufacturer_info_fmt.parse(f.info)
-
 
     def get_system_parameters(self, dev_id=None):
         if dev_id:
@@ -297,8 +303,8 @@ class Pylontech:
         return d
 
 
-if __name__ == '__main__':
-    p = Pylontech()
+def main(argv):
+    p = Pylontech(argv[1], int(argv[2]))
     # print(p.get_protocol_version())
     # print(p.get_manufacturer_info())
     # print(p.get_system_parameters())
@@ -306,3 +312,7 @@ if __name__ == '__main__':
     # print(p.get_module_serial_number())
     # print(p.get_values())
     print(p.get_values_single(2))
+
+
+if __name__ == '__main__':
+    main(sys.argv)
