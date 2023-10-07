@@ -126,6 +126,25 @@ class Pylontech:
             lambda this: sum([x.RemainingCapacity for x in this.Module]) / sum([x.TotalCapacity for x in this.Module])),
 
     )
+
+    # 20 version
+    # 02 version
+    # 46 address
+    # 00 cid1
+    # C0 cid2
+    # 6E11 infolength
+    # info
+    # 02 module number
+    # 0F num of cells
+    # 0CC5 0CC6 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5 0CC5
+    # 05
+    # 0BE2 bms temp
+    # 0BBC 0BC1 0BBC 0BCF  temperatures
+    # FFCF current
+    # BF8C voltage
+    # 59B8 remaining capacity
+    # 02C3 info
+    # 5001AEE443 crc
     get_values_single_fmt = construct.Struct(
         "NumberOfModule" / construct.Byte,
         "NumberOfCells" / construct.Int8ub,
@@ -183,6 +202,7 @@ class Pylontech:
 
     def send_cmd(self, address: int, cmd, info: bytes = b''):
         raw_frame = self._encode_cmd(address, cmd, info)
+        print(f">>> {raw_frame}")
         self.rs_socket.send(raw_frame)
 
     @staticmethod
@@ -222,6 +242,7 @@ class Pylontech:
 
     def read_frame(self):
         raw_frame = self.rs_socket.recv(128)
+        print(f"<<< {raw_frame}")
         f = self._decode_hw_frame(raw_frame=raw_frame)
         parsed = self._decode_frame(f)
         return parsed
@@ -303,15 +324,16 @@ class Pylontech:
         return d
 
 
+# ip, port, module id
 def main(argv):
     p = Pylontech(argv[1], int(argv[2]))
     # print(p.get_protocol_version())
     # print(p.get_manufacturer_info())
-    # print(p.get_system_parameters())
+    print(p.get_system_parameters())
     # print(p.get_management_info())
     # print(p.get_module_serial_number())
     # print(p.get_values())
-    print(p.get_values_single(2))
+    print(p.get_values_single(int(argv[3])))
 
 
 if __name__ == '__main__':
