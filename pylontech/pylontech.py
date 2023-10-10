@@ -173,6 +173,7 @@ class Pylontech:
 
     def __init__(self, ip: str, port: int):
         self.rs_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.rs_socket.settimeout(5)
         self.rs_socket.connect((ip, port))
         print(f"Socket open {self.rs_socket}")
 
